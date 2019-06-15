@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 
@@ -79,8 +80,10 @@ func parseLinebotCallback(w http.ResponseWriter, r *http.Request) error {
 		if event.Type != linebot.EventTypeMessage {
 			continue
 		}
+
+		fmt.Println(event.Source.UserID, event.Source.RoomID, event.Source.GroupID)
 		message := linebot.NewTextMessage("你好")
-		if _, err := botSrv.PushMessage(event.Source.UserID, message).Do(); err != nil {
+		if _, err := botSrv.ReplyMessage(event.ReplyToken, message).Do(); err != nil {
 			logrus.Error(err)
 			return err
 		}
