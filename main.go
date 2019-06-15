@@ -38,8 +38,8 @@ func handleCallback(c *gin.Context) {
 }
 
 func initLinebot() error {
-	channelSecret := os.Getenv("ChannelSecret")
-	channelAccessToken := os.Getenv("ChannelAccessToken")
+	channelSecret := os.Getenv("channelSecret")
+	channelAccessToken := os.Getenv("channelAccessToken")
 	bot, err := linebot.New(channelSecret, channelAccessToken)
 	if err != nil {
 		logrus.Error(err)
