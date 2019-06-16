@@ -59,6 +59,30 @@
 			"revisionTime": "2019-02-26T22:47:05Z"
 		},
 		{
+			"checksumSHA1": "4cv088wLQ4T0fvi8pe/F9pzzAH8=",
+			"path": "github.com/lib/pq",
+			"revision": "bc6a3c0594130b1e34005880bc600b6d3f49fa7f",
+			"revisionTime": "2019-05-03T17:57:21Z",
+			"version": "v1.1.1",
+			"versionExact": "v1.1.1"
+		},
+		{
+			"checksumSHA1": "AU3fA8Sm33Vj9PBoRPSeYfxLRuE=",
+			"path": "github.com/lib/pq/oid",
+			"revision": "bc6a3c0594130b1e34005880bc600b6d3f49fa7f",
+			"revisionTime": "2019-05-03T17:57:21Z",
+			"version": "v1.1.1",
+			"versionExact": "v1.1.1"
+		},
+		{
+			"checksumSHA1": "ywel3wHXnu1eLhyT1/FolporeAc=",
+			"path": "github.com/lib/pq/scram",
+			"revision": "bc6a3c0594130b1e34005880bc600b6d3f49fa7f",
+			"revisionTime": "2019-05-03T17:57:21Z",
+			"version": "v1.1.1",
+			"versionExact": "v1.1.1"
+		},
+		{
 			"checksumSHA1": "TiaJgY48y1Do59np93drjPadKKU=",
 			"path": "github.com/line/line-bot-sdk-go/linebot",
 			"revision": "8eff2befa64f3f728971b9f9881a7a738a83797b",
@@ -115,6 +139,11 @@
 			"path": "gopkg.in/yaml.v2",
 			"revision": "51d6538a90f86fe93ac480b35f37b2be17fef232",
 			"revisionTime": "2018-11-15T11:05:04Z"
+		},
+		{
+			"path": "https://github.com/lib/pq",
+			"revision": "v1.1.1",
+			"version": "v1.1.1"
 		}
 	],
 	"rootPath": "github.com/andy/guachi-pay-line-bot"
