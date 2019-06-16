@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"os"
 	"runtime"
 	"time"
 
@@ -23,7 +24,7 @@ func init() {
 }
 
 func setupPostgresSrv() error {
-	db, err := sql.Open(driverName, "postgresql://localhost:5432?sslmode=disable")
+	db, err := sql.Open(driverName, os.Getenv("DATABASE_URL"))
 	if err != nil {
 		logrus.WithField("err", err).Error("sql.Open failed in setupPostgresSrv")
 		return err
