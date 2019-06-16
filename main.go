@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	// "fmt"
 	"net/http"
 	"os"
 
@@ -24,12 +24,19 @@ func main() {
 	route.POST("/callback", handleCallback)
 
 	route.Run()
+
+	logrus.Info("start serving https request")
 	return
 }
 
 func handleCallback(c *gin.Context) {
 	if err := parseLinebotCallback(c.Writer, c.Request); err != nil {
-		logrus.Error(err)
+		if err == linebot.ErrInvalidSignature {
+			c.JSON(http.StatusUnauthorized, gin.H{})
+			return
+		}
+
+		logrus.WithField("err", err).Error("parseLinebotCallback failed in handleCallback")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"errorMessage": err.Error(),
 		})
@@ -43,7 +50,7 @@ func initLinebot() error {
 	channelAccessToken := os.Getenv("channelAccessToken")
 	bot, err := linebot.New(channelSecret, channelAccessToken)
 	if err != nil {
-		logrus.Error(err)
+		logrus.WithField("err", err).Error("linebot.New failed in initLinebot")
 		return err
 	}
 
@@ -57,7 +64,7 @@ func getLinebotService() (*linebot.Client, error) {
 	}
 
 	if err := initLinebot(); err != nil {
-		logrus.Error(err)
+		logrus.WithField("err", err).Error("initLinebot failed in getLinebotService")
 		return nil, err
 	}
 	return botSrv, nil
@@ -66,13 +73,13 @@ func getLinebotService() (*linebot.Client, error) {
 func parseLinebotCallback(w http.ResponseWriter, r *http.Request) error {
 	botSrv, err := getLinebotService()
 	if err != nil {
-		logrus.Error(err)
+		logrus.WithField("err", err).Error("getLinebotService failed in parseLinebotCallback")
 		return err
 	}
 
 	events, err := botSrv.ParseRequest(r)
 	if err != nil {
-		logrus.Error(err)
+		logrus.WithField("err", err).Error("ParseRequest failed in parseLinebotCallback")
 		return err
 	}
 
@@ -81,12 +88,22 @@ func parseLinebotCallback(w http.ResponseWriter, r *http.Request) error {
 			continue
 		}
 
-		fmt.Println(event.Source.UserID, event.Source.RoomID, event.Source.GroupID)
 		message := linebot.NewTextMessage("你好")
 		if _, err := botSrv.ReplyMessage(event.ReplyToken, message).Do(); err != nil {
-			logrus.Error(err)
+			logrus.WithFields(logrus.Fields{
+				"err":     err,
+				"userID":  event.Source.UserID,
+				"roomID":  event.Source.RoomID,
+				"groupID": event.Source.GroupID,
+			}).Error("ReplyMessage failed in parseLinebotCallback")
 			return err
 		}
+
+		logrus.WithFields(logrus.Fields{
+			"userID":  event.Source.UserID,
+			"roomID":  event.Source.RoomID,
+			"groupID": event.Source.GroupID,
+		}).Info("message is sent successfully")
 	}
 	return nil
 }
