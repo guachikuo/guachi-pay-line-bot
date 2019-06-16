@@ -1,13 +1,16 @@
 package main
 
 import (
-	// "fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	_ "github.com/lib/pq"
 	"github.com/line/line-bot-sdk-go/linebot"
 	"github.com/sirupsen/logrus"
+
+	"github.com/andy/guachi-pay-line-bot/wallet"
 )
 
 var (
@@ -23,9 +26,8 @@ func main() {
 	route := gin.Default()
 	route.POST("/callback", handleCallback)
 
-	route.Run()
-
 	logrus.Info("start serving https request")
+	route.Run()
 	return
 }
 
@@ -36,7 +38,6 @@ func handleCallback(c *gin.Context) {
 			return
 		}
 
-		logrus.WithField("err", err).Error("parseLinebotCallback failed in handleCallback")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"errorMessage": err.Error(),
 		})
@@ -88,22 +89,46 @@ func parseLinebotCallback(w http.ResponseWriter, r *http.Request) error {
 			continue
 		}
 
-		message := linebot.NewTextMessage("你好")
-		if _, err := botSrv.ReplyMessage(event.ReplyToken, message).Do(); err != nil {
-			logrus.WithFields(logrus.Fields{
-				"err":     err,
-				"userID":  event.Source.UserID,
-				"roomID":  event.Source.RoomID,
-				"groupID": event.Source.GroupID,
-			}).Error("ReplyMessage failed in parseLinebotCallback")
-			return err
-		}
+		switch message := event.Message.(type) {
+		case *linebot.TextMessage:
+			texts := strings.Split(message.Text, " ")
+			if !(len(texts) == 2 && texts[0] == "初始化") {
+				temp := linebot.NewTextMessage("看不懂你在說什麼 !!!")
+				if _, err := botSrv.ReplyMessage(event.ReplyToken, temp).Do(); err != nil {
+					logrus.WithFields(logrus.Fields{
+						"err":     err,
+						"userID":  event.Source.UserID,
+						"groupID": event.Source.GroupID,
+					}).Error("ReplyMessage failed in parseLinebotCallback")
+					return err
+				}
+				continue
+			}
 
-		logrus.WithFields(logrus.Fields{
-			"userID":  event.Source.UserID,
-			"roomID":  event.Source.RoomID,
-			"groupID": event.Source.GroupID,
-		}).Info("message is sent successfully")
+			userID := texts[1]
+			if err := wallet.InitWallet(userID); err != nil {
+				logrus.WithFields(logrus.Fields{
+					"err":     err,
+					"userID":  event.Source.UserID,
+					"groupID": event.Source.GroupID,
+				}).Info("message is sent successfully")
+				return err
+			}
+
+			temp := linebot.NewTextMessage("初始化 " + userID + " 成功 !!!")
+			if _, err := botSrv.ReplyMessage(event.ReplyToken, temp).Do(); err != nil {
+				logrus.WithFields(logrus.Fields{
+					"err":     err,
+					"userID":  event.Source.UserID,
+					"groupID": event.Source.GroupID,
+				}).Error("ReplyMessage failed in parseLinebotCallback")
+				return err
+			}
+		default:
+			logrus.WithFields(logrus.Fields{
+				"message": message,
+			}).Info("not text mesaage type")
+		}
 	}
 	return nil
 }
