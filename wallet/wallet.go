@@ -1,6 +1,8 @@
 package wallet
 
 import (
+	"fmt"
+
 	"github.com/sirupsen/logrus"
 
 	"github.com/andy/guachi-pay-line-bot/db"
@@ -12,7 +14,13 @@ const (
 		INSERT INTO "UsersWallet" ("userID", "balance")
 		VALUES ($1, $2);
 	`
-	patchWallet = `UPDATE "UsersWallet" SET balance = $1 WHERE "userID" = $2;`
+	patchWallet       = `UPDATE "UsersWallet" SET balance = $1 WHERE "userID" = $2;`
+	atomicPatchWallet = `UPDATE "UsersWallet" SET balance = balance + $1 WHERE "userID" = $2;`
+)
+
+var (
+	// ErrWalletNotExist occurs when trying to do operation to the non-exist wallet
+	ErrWalletNotExist = fmt.Errorf("the wallet doesn't exist")
 )
 
 // InitWallet initialize the user's wallet
@@ -20,19 +28,19 @@ const (
 func InitWallet(userID string) error {
 	rdsdbSrv, err := db.GetPostgresSrv()
 	if err != nil {
-		logrus.WithField("err", err).Error("db.GetPostgresSrv failed in initWallet")
+		logrus.WithField("err", err).Error("db.GetPostgresSrv failed in InitWallet")
 		return err
 	}
 
 	result, err := rdsdbSrv.Exec(checkIfWalletExists, userID)
 	if err != nil {
-		logrus.WithField("err", err).Error("rdsdbSrv.Exec checkIfWalletExists failed in initWallet")
+		logrus.WithField("err", err).Error("rdsdbSrv.Exec checkIfWalletExists failed in InitWallet")
 		return err
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		logrus.WithField("err", err).Error("result.RowsAffected failed in initWallet")
+		logrus.WithField("err", err).Error("result.RowsAffected failed in InitWallet")
 		return err
 	}
 
@@ -45,14 +53,37 @@ func InitWallet(userID string) error {
 
 	result, err = rdsdbSrv.Exec(sqlStmt, args...)
 	if err != nil {
-		logrus.WithField("err", err).Error("rdsdbSrv.Exec upsert wallet failed in initWallet")
+		logrus.WithField("err", err).Error("rdsdbSrv.Exec upsert wallet failed in InitWallet")
 		return err
 	}
 
 	rowsAffected, err = result.RowsAffected()
 	if err != nil || err == nil && rowsAffected == int64(0) {
-		logrus.WithField("err", err).Error("result.RowsAffected failed in initWallet")
+		logrus.WithField("err", err).Error("result.RowsAffected failed in InitWallet")
 		return err
+	}
+	return nil
+}
+
+// AtomicPatchWallet will increase or decrease balance for `userID`'s wallet
+func AtomicPatchWallet(userID string, moneyCount int64) error {
+	rdsdbSrv, err := db.GetPostgresSrv()
+	if err != nil {
+		logrus.WithField("err", err).Error("db.GetPostgresSrv failed in AtomicPatchWallet")
+		return err
+	}
+
+	result, err := rdsdbSrv.Exec(atomicPatchWallet, userID, moneyCount)
+	if err != nil {
+		logrus.WithField("err", err).Error("rdsdbSrv.Exec upsert wallet failed in AtomicPatchWallet")
+		return err
+	}
+
+	if rowsAffected, err := result.RowsAffected(); err != nil {
+		logrus.WithField("err", err).Error("result.RowsAffected failed in AtomicPatchWallet")
+		return err
+	} else if err == nil && rowsAffected == int64(0) {
+		return ErrWalletNotExist
 	}
 	return nil
 }
