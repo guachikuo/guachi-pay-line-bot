@@ -24,6 +24,10 @@ func init() {
 }
 
 func setupPostgresSrv() error {
+	if rdsdb != nil {
+		return nil
+	}
+
 	db, err := sql.Open(driverName, os.Getenv("DATABASE_URL"))
 	if err != nil {
 		logrus.WithField("err", err).Error("sql.Open failed in setupPostgresSrv")
