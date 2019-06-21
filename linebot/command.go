@@ -25,9 +25,9 @@ type response struct {
 type command struct {
 	// commandIndex defines the index that the main command name is placed at in strings.Split(text, " ")
 	commandIndex int
-	// argsAllowed defines the number of args that this command is allowed（including the main command)
+	// argsAllowed defines the number of args that this command is allowed
 	// ex: guachi 儲值
-	// then the value is 2
+	// then the value is 1
 	argsAllowed int
 	// execFunc is the execution function
 	execFunc func(args ...string) (*response, error)
@@ -38,17 +38,17 @@ var (
 	commands = map[string]command{
 		"創建錢包": command{
 			commandIndex: 0,
-			argsAllowed:  2,
+			argsAllowed:  1,
 			execFunc:     initWallet,
 		},
 		"儲值": command{
 			commandIndex: 1,
-			argsAllowed:  3,
+			argsAllowed:  2,
 			execFunc:     deposit,
 		},
 		"花費": command{
 			commandIndex: 1,
-			argsAllowed:  3,
+			argsAllowed:  2,
 			execFunc:     spend,
 		},
 	}
