@@ -73,7 +73,7 @@ func AtomicPatchWallet(userID string, moneyCount int64) error {
 		return err
 	}
 
-	result, err := rdsdbSrv.Exec(atomicPatchWallet, userID, moneyCount)
+	result, err := rdsdbSrv.Exec(atomicPatchWallet, moneyCount, userID)
 	if err != nil {
 		logrus.WithField("err", err).Error("rdsdbSrv.Exec upsert wallet failed in AtomicPatchWallet")
 		return err
