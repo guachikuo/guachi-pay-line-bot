@@ -30,31 +30,34 @@ type command struct {
 	// then the value is 1
 	argsAllowed int
 	// execFunc is the execution function
-	execFunc func(args ...string) (*response, error)
+	execFunc func(im *impl, args ...string) (*response, error)
 }
 
 var (
 	// commands defines the allowed commands
 	commands = map[string]command{
+		// ex: 創建錢包 guachi
 		"創建錢包": command{
 			commandIndex: 0,
 			argsAllowed:  1,
-			execFunc:     initWallet,
+			execFunc:     createWallet,
 		},
+		// ex: guachi 儲值 100
 		"儲值": command{
 			commandIndex: 1,
 			argsAllowed:  2,
-			execFunc:     deposit,
+			execFunc:     depositMoney,
 		},
+		// ex: guachi 晚餐 花費 100
 		"花費": command{
 			commandIndex: 1,
-			argsAllowed:  2,
-			execFunc:     spend,
+			argsAllowed:  3,
+			execFunc:     spendMoney,
 		},
 	}
 )
 
-func procCommand(text string) (*response, error) {
+func (im *impl) procCommand(text string) (*response, error) {
 	texts := strings.Split(text, " ")
 	if len(texts) == 0 {
 		return nil, ErrCommandNotExist
@@ -79,28 +82,49 @@ func procCommand(text string) (*response, error) {
 	if !found || (found && len(args) != targetCommand.argsAllowed) {
 		return nil, ErrCommandNotExist
 	}
-	return targetCommand.execFunc(args...)
+	return targetCommand.execFunc(im, args...)
 }
 
-func initWallet(args ...string) (*response, error) {
+func createWallet(im *impl, args ...string) (*response, error) {
 	userID := args[0]
-	if err := wallet.InitWallet(userID); err != nil {
-		logrus.WithField("err", err).Error("wallet.InitWallet failed in initWallet")
+	if err := im.wallet.Create(userID); err != nil && err != wallet.ErrWalletExist {
+		logrus.WithField("err", err).Error("wallet.CreateWallet failed in createWallet")
 		return nil, err
+	} else if err == wallet.ErrWalletExist {
+		return &response{
+			text: linebot.NewTextMessage("錢包已經存在囉 ~"),
+		}, nil
 	}
+
 	return &response{
 		text: linebot.NewTextMessage("創建 " + userID + " 的錢包成功 !!!"),
 	}, nil
 }
 
-func deposit(args ...string) (*response, error) {
+func emptyWallet(im *impl, args ...string) (*response, error) {
 	userID := args[0]
-	moneyCount, err := strconv.ParseInt(args[1], 10, 64)
-	if err != nil || (err == nil && moneyCount < int64(0)) {
+	if err := im.wallet.Empty(userID); err != nil && err != wallet.ErrWalletNotExist {
+		logrus.WithField("err", err).Error("wallet.EmptyWallet failed in emptyWallet")
+		return nil, err
+	} else if err == wallet.ErrWalletNotExist {
+		return &response{
+			text: linebot.NewTextMessage("錢包不存在，請先建立錢包唷 ~"),
+		}, nil
+	}
+
+	return &response{
+		text: linebot.NewTextMessage("已清空 " + userID + " 的錢包 !!!"),
+	}, nil
+}
+
+func depositMoney(im *impl, args ...string) (*response, error) {
+	userID := args[0]
+	amount, err := strconv.ParseInt(args[1], 10, 64)
+	if err != nil || (err == nil && amount < int64(0)) {
 		return nil, ErrInvalidArgument
 	}
 
-	if err := wallet.AtomicPatchWallet(userID, moneyCount); err != nil && err != wallet.ErrWalletNotExist {
+	if err := im.wallet.Deposit(userID, amount); err != nil && err != wallet.ErrWalletNotExist {
 		logrus.WithField("err", err).Error("wallet.AtomicPatchWallet failed in deposit")
 		return nil, err
 	} else if err == wallet.ErrWalletNotExist {
@@ -114,14 +138,15 @@ func deposit(args ...string) (*response, error) {
 	}, nil
 }
 
-func spend(args ...string) (*response, error) {
+func spendMoney(im *impl, args ...string) (*response, error) {
 	userID := args[0]
-	moneyCount, err := strconv.ParseInt(args[1], 10, 64)
-	if err != nil || (err == nil && moneyCount < int64(0)) {
+	reason := args[1]
+	amount, err := strconv.ParseInt(args[2], 10, 64)
+	if err != nil || (err == nil && amount < int64(0)) {
 		return nil, ErrInvalidArgument
 	}
 
-	if err := wallet.AtomicPatchWallet(userID, -1*moneyCount); err != nil && err != wallet.ErrWalletNotExist {
+	if err := im.wallet.Spend(userID, amount, reason); err != nil && err != wallet.ErrWalletNotExist {
 		logrus.WithField("err", err).Error("wallet.AtomicPatchWallet failed in spend")
 		return nil, err
 	} else if err == wallet.ErrWalletNotExist {
