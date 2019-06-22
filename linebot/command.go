@@ -61,13 +61,14 @@ func procCommand(text string) (*response, error) {
 	}
 
 	found := false
-	command := command{}
+	targetCommand := command{}
 	args := []string{}
 	for i, text := range texts {
 		// check that if text fits the command name
 		// also, the command name should be in the right place
 		if command, ok := commands[text]; ok && i == command.commandIndex {
 			found = true
+			targetCommand = command
 			continue
 		}
 		args = append(args, text)
@@ -75,10 +76,10 @@ func procCommand(text string) (*response, error) {
 
 	// (1) valid command name is not found
 	// (2) lack of arguments
-	if !found || (found && len(args) != command.argsAllowed) {
+	if !found || (found && len(args) != targetCommand.argsAllowed) {
 		return nil, ErrCommandNotExist
 	}
-	return command.execFunc(args...)
+	return targetCommand.execFunc(args...)
 }
 
 func initWallet(args ...string) (*response, error) {
