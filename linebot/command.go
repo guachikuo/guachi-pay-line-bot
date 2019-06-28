@@ -15,13 +15,6 @@ const (
 	helpCommandName = "!help"
 )
 
-var (
-	// ErrCommandNotExist occurs when the command is invalid
-	ErrCommandNotExist = fmt.Errorf("the command doesn't exist")
-	// ErrInvalidArgument occurs when the caller gives invalid argument
-	ErrInvalidArgument = fmt.Errorf("invalid argument is found")
-)
-
 type response struct {
 	text *linebot.TextMessage
 }
@@ -39,39 +32,68 @@ type command struct {
 	helpDesc string
 }
 
+type commandName string
+
+const (
+	commandCreateWallet commandName = "創建錢包"
+	commandEmptyWallet  commandName = "清空錢包"
+	commandGetBalance   commandName = "查詢餘額"
+	commandDepositMoney commandName = "+"
+	commandSpendMoney   commandName = "-"
+)
+
 var (
+	// ErrCommandNotExist occurs when the command is invalid
+	ErrCommandNotExist = fmt.Errorf("the command doesn't exist")
+	// ErrInvalidArgument occurs when the caller gives invalid argument
+	ErrInvalidArgument = fmt.Errorf("invalid argument is found")
+
+	// commandDisplayedInHelp defines what commands could be displayed in `!help` and their orders
+	commandDisplayedInHelp = []commandName{
+		commandCreateWallet,
+		commandCreateWallet,
+		commandEmptyWallet,
+		commandGetBalance,
+		commandDepositMoney,
+		commandSpendMoney,
+	}
+
 	// commands defines the allowed commands
-	commands = map[string]command{
+	commands = map[commandName]command{
 		// ex: guachi 創建錢包
-		"創建錢包": command{
+		commandCreateWallet: command{
 			commandIndex: 1,
 			argsAllowed:  1,
 			execFunc:     createWallet,
 			helpDesc:     "<錢包名稱> 創建錢包\nex: guachi 創建錢包",
 		},
+
 		// ex: guachi 清空錢包
-		"清空錢包": command{
+		commandEmptyWallet: command{
 			commandIndex: 1,
 			argsAllowed:  1,
 			execFunc:     emptyBalance,
 			helpDesc:     "<錢包名稱> 清空錢包\nex: guachi 清空錢包",
 		},
+
 		// ex: 查詢餘額 guachi
-		"查詢餘額": command{
+		commandGetBalance: command{
 			commandIndex: 0,
 			argsAllowed:  1,
 			execFunc:     getBalance,
 			helpDesc:     "查詢餘額 <錢包名稱>\nex: 查詢餘額 guachi",
 		},
+
 		// ex: guachi 中樂透 + 100
-		"+": command{
+		commandDepositMoney: command{
 			commandIndex: 2,
 			argsAllowed:  3,
 			execFunc:     depositMoney,
 			helpDesc:     "<錢包名稱> <原因> + <多少錢>\nex: guachi 中樂透 + 100",
 		},
+
 		// ex: guachi 晚餐 - 100
-		"-": command{
+		commandSpendMoney: command{
 			commandIndex: 2,
 			argsAllowed:  3,
 			execFunc:     spendMoney,
@@ -82,16 +104,9 @@ var (
 
 func getCommands() string {
 	text := ""
-	i := 1
-	for key, command := range commands {
-		if key == helpCommandName {
-			continue
-		}
-
-		text += strconv.FormatInt(int64(i), 10) + ". " + command.helpDesc + "\n\n"
-		i++
+	for i, command := range commandDisplayedInHelp {
+		text += strconv.FormatInt(int64(i+1), 10) + ". " + commands[command].helpDesc + "\n\n"
 	}
-
 	return "```" + text + "```"
 }
 
@@ -113,7 +128,7 @@ func (im *impl) procCommand(text string) (*response, error) {
 	for i, text := range texts {
 		// check that if text fits the command name
 		// also, the command name should be in the right place
-		if command, ok := commands[text]; ok && i == command.commandIndex {
+		if command, ok := commands[commandName(text)]; ok && i == command.commandIndex {
 			found = true
 			targetCommand = command
 			continue
