@@ -134,7 +134,7 @@ func emptyBalance(im *impl, args ...string) (*response, error) {
 }
 
 func getBalance(im *impl, args ...string) (*response, error) {
-	userID := args[1]
+	userID := args[0]
 	balance, err := im.wallet.GetBalance(userID)
 	if err == wallet.ErrWalletNotFound {
 		return getWalletNotFoundResponse(), nil
