@@ -36,26 +36,44 @@ type command struct {
 var (
 	// commands defines the allowed commands
 	commands = map[string]command{
-		// ex: 創建錢包 guachi
+		// ex: guachi 創建錢包
 		"創建錢包": command{
-			commandIndex: 0,
+			commandIndex: 1,
 			argsAllowed:  1,
 			execFunc:     createWallet,
 		},
-		// ex: guachi 儲值 100
-		"儲值": command{
+		// ex: guachi 清空錢包
+		"清空錢包": command{
 			commandIndex: 1,
-			argsAllowed:  2,
+			argsAllowed:  1,
+			execFunc:     emptyBalance,
+		},
+		// ex: 查詢餘額 guachi
+		"查詢餘額": command{
+			commandIndex: 0,
+			argsAllowed:  1,
+			execFunc:     getBalance,
+		},
+		// ex: guachi 中樂透 + 100
+		"+": command{
+			commandIndex: 2,
+			argsAllowed:  3,
 			execFunc:     depositMoney,
 		},
-		// ex: guachi 晚餐 花費 100
-		"花費": command{
-			commandIndex: 1,
+		// ex: guachi 晚餐 - 100
+		"-": command{
+			commandIndex: 2,
 			argsAllowed:  3,
 			execFunc:     spendMoney,
 		},
 	}
 )
+
+func getWalletNotFoundResponse() *response {
+	return &response{
+		text: linebot.NewTextMessage("錢包不存在，請先建立錢包"),
+	}
+}
 
 func (im *impl) procCommand(text string) (*response, error) {
 	texts := strings.Split(text, " ")
@@ -88,74 +106,126 @@ func (im *impl) procCommand(text string) (*response, error) {
 func createWallet(im *impl, args ...string) (*response, error) {
 	userID := args[0]
 	if err := im.wallet.Create(userID); err != nil && err != wallet.ErrWalletExist {
-		logrus.WithField("err", err).Error("wallet.CreateWallet failed in createWallet")
+		logrus.WithField("err", err).Error("wallet.Create failed in createWallet")
 		return nil, err
 	} else if err == wallet.ErrWalletExist {
 		return &response{
-			text: linebot.NewTextMessage("錢包已經存在囉 ~"),
+			text: linebot.NewTextMessage("錢包已經存在囉"),
 		}, nil
 	}
 
 	return &response{
-		text: linebot.NewTextMessage("創建 " + userID + " 的錢包成功 !!!"),
+		text: linebot.NewTextMessage("創建 " + userID + " 的錢包成功"),
 	}, nil
 }
 
-func emptyWallet(im *impl, args ...string) (*response, error) {
+func emptyBalance(im *impl, args ...string) (*response, error) {
 	userID := args[0]
-	if err := im.wallet.Empty(userID); err != nil && err != wallet.ErrWalletNotExist {
-		logrus.WithField("err", err).Error("wallet.EmptyWallet failed in emptyWallet")
+	if err := im.wallet.EmptyBalance(userID); err == wallet.ErrWalletNotFound {
+		return getWalletNotFoundResponse(), nil
+	} else if err != nil {
+		logrus.WithField("err", err).Error("wallet.EmptyBalance failed in emptyBalance")
 		return nil, err
-	} else if err == wallet.ErrWalletNotExist {
-		return &response{
-			text: linebot.NewTextMessage("錢包不存在，請先建立錢包唷 ~"),
-		}, nil
 	}
 
 	return &response{
-		text: linebot.NewTextMessage("已清空 " + userID + " 的錢包 !!!"),
+		text: linebot.NewTextMessage("已清空 " + userID + " 的錢包"),
+	}, nil
+}
+
+func getBalance(im *impl, args ...string) (*response, error) {
+	userID := args[1]
+	balance, err := im.wallet.GetBalance(userID)
+	if err == wallet.ErrWalletNotFound {
+		return getWalletNotFoundResponse(), nil
+	} else if err != nil {
+		logrus.WithField("err", err).Error("wallet.GetBalance failed in getBalance")
+		return nil, err
+	}
+
+	return &response{
+		text: linebot.NewTextMessage("目前餘額 " + strconv.FormatInt(balance, 10) + "元"),
 	}, nil
 }
 
 func depositMoney(im *impl, args ...string) (*response, error) {
 	userID := args[0]
-	amount, err := strconv.ParseInt(args[1], 10, 64)
-	if err != nil || (err == nil && amount < int64(0)) {
-		return nil, ErrInvalidArgument
-	}
 
-	if err := im.wallet.Deposit(userID, amount); err != nil && err != wallet.ErrWalletNotExist {
-		logrus.WithField("err", err).Error("wallet.AtomicPatchWallet failed in deposit")
+	// get original balance first
+	originalBalance, err := im.wallet.GetBalance(userID)
+	if err == wallet.ErrWalletNotFound {
+		return getWalletNotFoundResponse(), nil
+	} else if err != nil {
+		logrus.WithField("err", err).Error("wallet.GetBalance failed in depositMoney")
 		return nil, err
-	} else if err == wallet.ErrWalletNotExist {
-		return &response{
-			text: linebot.NewTextMessage("錢包不存在，請先建立錢包唷 ~"),
-		}, nil
 	}
 
-	return &response{
-		text: linebot.NewTextMessage(userID + " 儲值 " + args[1] + " 元成功"),
-	}, nil
-}
-
-func spendMoney(im *impl, args ...string) (*response, error) {
-	userID := args[0]
 	reason := args[1]
 	amount, err := strconv.ParseInt(args[2], 10, 64)
 	if err != nil || (err == nil && amount < int64(0)) {
 		return nil, ErrInvalidArgument
 	}
 
-	if err := im.wallet.Spend(userID, amount, reason); err != nil && err != wallet.ErrWalletNotExist {
-		logrus.WithField("err", err).Error("wallet.AtomicPatchWallet failed in spend")
+	if err := im.wallet.Deposit(userID, amount, reason); err == wallet.ErrWalletNotFound {
+		return getWalletNotFoundResponse(), nil
+	} else if err != nil {
+		logrus.WithField("err", err).Error("wallet.Deposit failed in depositMoney")
 		return nil, err
-	} else if err == wallet.ErrWalletNotExist {
-		return &response{
-			text: linebot.NewTextMessage("錢包不存在，請先建立錢包唷 ~"),
-		}, nil
 	}
 
+	// get resulted balance after finish deposting
+	// as we have check if wallet does exist above, we don't need to specially handle here
+	resultedBalance, err := im.wallet.GetBalance(userID)
+	if err != nil {
+		logrus.WithField("err", err).Error("wallet.GetBalance failed in depositMoney")
+		return nil, err
+	}
+
+	line1 := "上次餘額 " + strconv.FormatInt(originalBalance, 10) + "元"
+	line2 := reason + " +" + args[2] + "元"
+	line3 := "目前餘額 " + strconv.FormatInt(resultedBalance, 10) + "元"
 	return &response{
-		text: linebot.NewTextMessage("已紀錄 " + userID + " 花費了 " + args[1] + " 元"),
+		text: linebot.NewTextMessage(line1 + "\n" + line2 + "\n---\n" + line3),
+	}, nil
+}
+
+func spendMoney(im *impl, args ...string) (*response, error) {
+	userID := args[0]
+
+	// get original balance first
+	originalBalance, err := im.wallet.GetBalance(userID)
+	if err == wallet.ErrWalletNotFound {
+		return getWalletNotFoundResponse(), nil
+	} else if err != nil {
+		logrus.WithField("err", err).Error("wallet.GetBalance failed in spendMoney")
+		return nil, err
+	}
+
+	reason := args[1]
+	amount, err := strconv.ParseInt(args[2], 10, 64)
+	if err != nil || (err == nil && amount < int64(0)) {
+		return nil, ErrInvalidArgument
+	}
+
+	if err := im.wallet.Spend(userID, amount, reason); err == wallet.ErrWalletNotFound {
+		return getWalletNotFoundResponse(), nil
+	} else if err != nil {
+		logrus.WithField("err", err).Error("wallet.Spend failed in spendMoney")
+		return nil, err
+	}
+
+	// get resulted balance after finish deposting
+	// as we have check if wallet does exist above, we don't need to specially handle here
+	resultedBalance, err := im.wallet.GetBalance(userID)
+	if err != nil {
+		logrus.WithField("err", err).Error("wallet.GetBalance failed in spendMoney")
+		return nil, err
+	}
+
+	line1 := "上次餘額 " + strconv.FormatInt(originalBalance, 10) + "元"
+	line2 := reason + " -" + args[2] + "元"
+	line3 := "目前餘額 " + strconv.FormatInt(resultedBalance, 10) + "元"
+	return &response{
+		text: linebot.NewTextMessage(line1 + "\n" + line2 + "\n---\n" + line3),
 	}, nil
 }

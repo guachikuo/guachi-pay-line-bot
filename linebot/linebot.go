@@ -98,7 +98,7 @@ func (im *impl) ParseLinebotCallback(w http.ResponseWriter, r *http.Request) err
 		default:
 			logrus.WithFields(logrus.Fields{
 				"message": message,
-			}).Info("not text mesaage type")
+			}).Info("not supported message type")
 		}
 	}
 	return nil
