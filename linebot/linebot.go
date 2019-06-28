@@ -76,6 +76,15 @@ func (im *impl) ParseLinebotCallback(w http.ResponseWriter, r *http.Request) err
 
 		switch message := event.Message.(type) {
 		case *linebot.TextMessage:
+			if message.Text == helpCommandName {
+				// we will reply back description of commands if user uses helpCommandName
+				if _, err := im.linebot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage(getCommands())).Do(); err != nil {
+					logrus.WithField("err", err).Error("ReplyMessage failed in parseLinebotCallback")
+					return err
+				}
+				continue
+			}
+
 			// get the message, and handle it
 			response, err := im.procCommand(message.Text)
 			if err != nil {
