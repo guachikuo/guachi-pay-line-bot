@@ -47,48 +47,48 @@ var (
 			commandIndex: 1,
 			argsAllowed:  1,
 			execFunc:     createWallet,
-			helpDesc:     "<錢包名稱> 創建錢包 ex: guachi 創建錢包",
+			helpDesc:     "<錢包名稱> 創建錢包\nex: guachi 創建錢包",
 		},
 		// ex: guachi 清空錢包
 		"清空錢包": command{
 			commandIndex: 1,
 			argsAllowed:  1,
 			execFunc:     emptyBalance,
-			helpDesc:     "<錢包名稱> 清空錢包 ex: guachi 清空錢包",
+			helpDesc:     "<錢包名稱> 清空錢包\nex: guachi 清空錢包",
 		},
 		// ex: 查詢餘額 guachi
 		"查詢餘額": command{
 			commandIndex: 0,
 			argsAllowed:  1,
 			execFunc:     getBalance,
-			helpDesc:     "查詢餘額 <錢包名稱> ex: 查詢餘額 guachi",
+			helpDesc:     "查詢餘額 <錢包名稱>\nex: 查詢餘額 guachi",
 		},
 		// ex: guachi 中樂透 + 100
 		"+": command{
 			commandIndex: 2,
 			argsAllowed:  3,
 			execFunc:     depositMoney,
-			helpDesc:     "<錢包名稱> <原因> + <多少錢> ex: guachi 中樂透 + 100",
+			helpDesc:     "<錢包名稱> <原因> + <多少錢>\nex: guachi 中樂透 + 100",
 		},
 		// ex: guachi 晚餐 - 100
 		"-": command{
 			commandIndex: 2,
 			argsAllowed:  3,
 			execFunc:     spendMoney,
-			helpDesc:     "<錢包名稱> <原因> - <多少錢> ex: guachi 晚餐 - 100",
+			helpDesc:     "<錢包名稱> <原因> - <多少錢>\nex: guachi 晚餐 - 100",
 		},
 	}
 )
 
 func getCommands() string {
 	text := ""
-	i := 0
+	i := 1
 	for key, command := range commands {
 		if key == helpCommandName {
 			continue
 		}
 
-		text += strconv.FormatInt(int64(i), 10) + " " + command.helpDesc + "\n"
+		text += strconv.FormatInt(int64(i), 10) + ". " + command.helpDesc + "\n\n"
 		i++
 	}
 
