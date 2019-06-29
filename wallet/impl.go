@@ -31,7 +31,7 @@ const (
 		SELECT 
 			reason, amount, timestamp 
 		FROM 
-			"UsersWalletLog 
+			"UsersWalletLog"
 		WHERE 
 			"userID" = $1 AND timestamp >= $2 AND timestamp <= $3 
 		ORDER BY
@@ -142,7 +142,7 @@ func convertToTimestampStr(timestamp int64) string {
 	temp := time.Unix(timestamp, 0)
 	// change to Asia/Taipei zone
 	location, _ := time.LoadLocation("Asia/Taipei")
-	temp.In(location)
+	temp = temp.In(location)
 	return fmt.Sprintf("%d/%d/%d %d:%d", temp.Year(), temp.Month(), temp.Day(), temp.Hour(), temp.Minute())
 }
 
@@ -163,10 +163,10 @@ func (im *impl) GetBalanceLogs(userID string, options ...GetLogsOption) ([]*Bala
 
 	balanceLogs := []*BalanceLog{}
 	for rows.Next() {
-		amount := int64(0)
 		reason := ""
+		amount := int64(0)
 		timestamp := int64(0)
-		if err := rows.Scan(&amount, &reason, &timestamp); err != nil {
+		if err := rows.Scan(&reason, &amount, &timestamp); err != nil {
 			logrus.WithField("err", err).Error("rows.Scan failed in GetBalanceLogs")
 			return nil, err
 		}

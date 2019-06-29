@@ -14,7 +14,6 @@ import (
 
 const (
 	helpCommandName = "!help"
-	timeTemplate    = "2016/01/01"
 )
 
 type response struct {
@@ -114,7 +113,7 @@ var (
 )
 
 func getCommands() string {
-	text := "<欄位1> : 欄位必填\n[欄位2] : 欄位選填\n"
+	text := "< ... > : 欄位必填\n[ ... ] : 欄位選填\n\n"
 	for i, command := range commandDisplayedInHelp {
 		text += strconv.FormatInt(int64(i+1), 10) + ". " + commands[command].helpDesc + "\n"
 		if i != len(commandDisplayedInHelp)-1 {
@@ -205,13 +204,15 @@ func getBalance(im *impl, args ...string) (*response, error) {
 
 // format: 2019/05/20 12:00
 func parseToTimestamp(timestampStr string) (int64, error) {
-	location, _ := time.LoadLocation("Asia/Taipei")
-	time, err := time.Parse(timeTemplate, timestampStr)
+	const shortForm = "2006/01/02"
+	result, err := time.Parse(shortForm, timestampStr)
 	if err != nil {
 		logrus.WithField("err", err).Error("time.Parse failed in parseToTimestamp")
 		return int64(0), err
 	}
-	return time.In(location).Unix(), nil
+
+	location, _ := time.LoadLocation("Asia/Taipei")
+	return result.In(location).Unix(), nil
 }
 
 func getBalanceLogs(im *impl, args ...string) (*response, error) {
