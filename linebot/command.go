@@ -87,7 +87,7 @@ var (
 			helpDesc:     "查詢餘額 <錢包名稱>\nex: 查詢餘額 guachi",
 		},
 
-		// ex: 歷史紀錄 <錢包名稱> <開始時間> [結束時間]
+		// ex: 歷史紀錄 guachi 2019/05/20 2019/05/21
 		commandGetBalanceLogs: command{
 			commandIndex: 0,
 			argsAllowed:  2,
