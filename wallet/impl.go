@@ -3,11 +3,11 @@ package wallet
 import (
 	"database/sql"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/andy/guachi-pay-line-bot/base"
 	"github.com/andy/guachi-pay-line-bot/db"
 )
 
@@ -17,6 +17,9 @@ const (
 	createWallet        = `
 		INSERT INTO "UsersWallet" ("userID", "balance")
 		VALUES ($1, $2);
+	`
+	deleteWallet = `
+		DELETE FROM "UsersWallet" WHERE "userID" = $1
 	`
 	patchWallet       = `UPDATE "UsersWallet" SET balance = $1 WHERE "userID" = $2;`
 	atomicPatchWallet = `UPDATE "UsersWallet" SET balance = balance + $1 WHERE "userID" = $2;`
@@ -93,6 +96,47 @@ func (im *impl) Create(userID string) error {
 	return nil
 }
 
+func (im *impl) Delete(userID string) error {
+	result, err := im.db.Exec(checkIfWalletExists, userID)
+	if err != nil {
+		logrus.WithField("err", err).Error("im.db.Exec(checkIfWalletExists) failed in Delete")
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		logrus.WithField("err", err).Error("result.RowsAffected failed in Delete")
+		return err
+	}
+
+	if rowsAffected == int64(0) {
+		return ErrWalletNotFound
+	}
+
+	tx, err := im.db.Begin()
+	if err != nil {
+		logrus.WithField("err", err).Error("im.db.Begin failed in Delete")
+		return err
+	}
+	defer execRollBack(tx)
+
+	if _, err := tx.Exec(deleteWallet, userID); err != nil {
+		logrus.WithField("err", err).Error("tx.Exec(deleteWallet) failed in Delete")
+		return err
+	}
+
+	if _, err := tx.Exec(deleteAllWalletLogs, userID); err != nil {
+		logrus.WithField("err", err).Error("tx.Exec(deleteAllWalletLogs failed in Delete")
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		logrus.WithField("err", err).Error("tx.Commit() failed in Delete")
+		return err
+	}
+	return nil
+}
+
 func (im *impl) EmptyBalance(userID string) error {
 	tx, err := im.db.Begin()
 	if err != nil {
@@ -115,7 +159,7 @@ func (im *impl) EmptyBalance(userID string) error {
 	}
 
 	if _, err := tx.Exec(deleteAllWalletLogs, userID); err != nil {
-		logrus.WithField("err", err).Error("tx.Exec(patchWallet) failed in EmptyBalance")
+		logrus.WithField("err", err).Error("tx.Exec(deleteAllWalletLogs) failed in EmptyBalance")
 		return err
 	}
 
@@ -137,34 +181,6 @@ func (im *impl) GetBalance(userID string) (int64, error) {
 		return int64(0), ErrWalletNotFound
 	}
 	return balance, nil
-}
-
-func convertToTimestampStr(timestamp int64) string {
-	temp := time.Unix(timestamp, 0)
-	// change to Asia/Taipei zone
-	location, _ := time.LoadLocation("Asia/Taipei")
-	temp = temp.In(location)
-
-	monthStr := strconv.FormatInt(int64(temp.Month()), 10)
-	if temp.Month() < time.October {
-		monthStr = "0" + monthStr
-	}
-
-	dayStr := strconv.FormatInt(int64(temp.Day()), 10)
-	if temp.Day() < 10 {
-		dayStr = "0" + dayStr
-	}
-
-	hourStr := strconv.FormatInt(int64(temp.Hour()), 10)
-	if temp.Hour() < 10 {
-		hourStr = "0" + hourStr
-	}
-
-	minuteStr := strconv.FormatInt(int64(temp.Minute()), 10)
-	if temp.Minute() < 10 {
-		minuteStr = "0" + minuteStr
-	}
-	return fmt.Sprintf("%d/%s/%s %s:%s", temp.Year(), monthStr, dayStr, hourStr, minuteStr)
 }
 
 func (im *impl) GetBalanceLogs(userID string, options ...GetLogsOption) ([]*BalanceLog, error) {
@@ -195,7 +211,7 @@ func (im *impl) GetBalanceLogs(userID string, options ...GetLogsOption) ([]*Bala
 		balanceLogs = append(balanceLogs, &BalanceLog{
 			Amount:    amount,
 			Reason:    reason,
-			Timestamp: convertToTimestampStr(timestamp),
+			Timestamp: base.ParseToyyymmddhhmm(timestamp),
 		})
 	}
 	return balanceLogs, nil
@@ -281,4 +297,23 @@ func (im *impl) Spend(userID string, amount int64, reason string) error {
 		return err
 	}
 	return nil
+}
+
+func (im *impl) IsWalletExist(userID string) bool {
+	result, err := im.db.Exec(checkIfWalletExists, userID)
+	if err != nil {
+		logrus.WithField("err", err).Error("im.db.Exec(checkIfWalletExists) failed in Create")
+		return false
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		logrus.WithField("err", err).Error("result.RowsAffected failed in Create")
+		return false
+	}
+
+	if rowsAffected == int64(0) {
+		return false
+	}
+	return true
 }

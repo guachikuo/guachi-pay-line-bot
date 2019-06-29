@@ -9,15 +9,35 @@ import (
 	"github.com/line/line-bot-sdk-go/linebot"
 	"github.com/sirupsen/logrus"
 
+	"github.com/andy/guachi-pay-line-bot/base"
 	"github.com/andy/guachi-pay-line-bot/wallet"
 )
 
 const (
-	helpCommandName = "!help"
+	helpCommandName = "help"
+	helpReplyTexts  = `感謝您傳送訊息給 guachi pay 😀
+	
+您還沒有錢包嗎? 可以參考這個指令唷 ~
+💰 新增錢包【錢包名稱】
+
+如果已經有，請輸入您的【錢包名稱】，我們將為您服務 🙂
+
+【想要自己輸入指令也可以! 請輸入以下指令來取得相關操作】
+💵 錢包:
+1. 清空錢包【錢包名稱】
+2. 刪除錢包【錢包名稱】
+	
+🔎 查詢:
+1. 查詢餘額【錢包名稱】
+2. 歷史紀錄【錢包名稱】
+
+📋 記帳:
+1.【錢包名稱】【原因】+【多少元】
+2.【錢包名稱】【原因】-【多少元】`
 )
 
 type response struct {
-	text *linebot.TextMessage
+	messages []linebot.SendingMessage
 }
 
 type command struct {
@@ -37,15 +57,14 @@ type command struct {
 	helpDesc string
 }
 
-type commandName string
-
 const (
-	commandCreateWallet   commandName = "創建錢包"
-	commandEmptyWallet    commandName = "清空錢包"
-	commandGetBalance     commandName = "查詢餘額"
-	commandGetBalanceLogs commandName = "歷史紀錄"
-	commandDepositMoney   commandName = "+"
-	commandSpendMoney     commandName = "-"
+	commandCreateWallet   = "新增錢包"
+	commandDeleteWallet   = "刪除錢包"
+	commandEmptyWallet    = "清空錢包"
+	commandGetBalance     = "查詢餘額"
+	commandGetBalanceLogs = "歷史紀錄"
+	commandDepositMoney   = "+"
+	commandSpendMoney     = "-"
 )
 
 var (
@@ -54,32 +73,30 @@ var (
 	// ErrInvalidArgument occurs when the caller gives invalid argument
 	ErrInvalidArgument = fmt.Errorf("invalid argument is found")
 
-	// commandDisplayedInHelp defines what commands could be displayed in `!help` and their orders
-	commandDisplayedInHelp = []commandName{
-		commandCreateWallet,
-		commandEmptyWallet,
-		commandGetBalance,
-		commandGetBalanceLogs,
-		commandDepositMoney,
-		commandSpendMoney,
-	}
-
 	// commands defines the allowed commands
-	commands = map[commandName]command{
-		// ex: guachi 創建錢包
+	commands = map[string]command{
+		// ex: 新增錢包 guachi
 		commandCreateWallet: command{
-			commandIndex: 1,
+			commandIndex: 0,
 			argsAllowed:  1,
 			execFunc:     createWallet,
-			helpDesc:     "<錢包名稱> 創建錢包\nex: guachi 創建錢包",
+			helpDesc:     "新增錢包【錢包名稱】\nex: 新增錢包 guachi",
 		},
 
-		// ex: guachi 清空錢包
+		// ex: 刪除錢包 guachi
+		commandDeleteWallet: command{
+			commandIndex: 0,
+			argsAllowed:  1,
+			execFunc:     deleteWallet,
+			helpDesc:     "刪除錢包【錢包名稱】\nex: 刪除錢包 guachi",
+		},
+
+		// ex: 清空錢包 guachi
 		commandEmptyWallet: command{
-			commandIndex: 1,
+			commandIndex: 0,
 			argsAllowed:  1,
 			execFunc:     emptyBalance,
-			helpDesc:     "<錢包名稱> 清空錢包\nex: guachi 清空錢包",
+			helpDesc:     "請輸入:\n清空錢包【錢包名稱】\n\nex: 清空錢包 guachi",
 		},
 
 		// ex: 查詢餘額 guachi
@@ -87,16 +104,17 @@ var (
 			commandIndex: 0,
 			argsAllowed:  1,
 			execFunc:     getBalance,
-			helpDesc:     "查詢餘額 <錢包名稱>\nex: 查詢餘額 guachi",
+			helpDesc:     "請輸入:\n查詢餘額【錢包名稱】\n\nex: 查詢餘額 guachi",
 		},
 
+		// ex: 歷史紀錄 guachi
 		// ex: 歷史紀錄 guachi 2019/05/20 2019/06/20
 		commandGetBalanceLogs: command{
 			commandIndex:        0,
-			argsAllowed:         2,
-			optionalArgsAllowed: 1,
+			argsAllowed:         1,
+			optionalArgsAllowed: 2,
 			execFunc:            getBalanceLogs,
-			helpDesc:            "歷史紀錄 <錢包名稱> <日期> [日期]\nex: 歷史紀錄 guachi 2019/05/20 2019/06/20",
+			helpDesc:            "請輸入:\n歷史紀錄【錢包名稱】【起日】【迄日】\n\nex: 歷史紀錄 guachi 2019/05/20 2019/06/20",
 		},
 
 		// ex: guachi 中樂透 + 100
@@ -104,7 +122,7 @@ var (
 			commandIndex: 2,
 			argsAllowed:  3,
 			execFunc:     depositMoney,
-			helpDesc:     "<錢包名稱> <原因> + <多少錢>\nex: guachi 中樂透 + 100",
+			helpDesc:     "請輸入:\n【錢包名稱】【原因】+【多少錢】\n\nex: guachi 中樂透 + 100",
 		},
 
 		// ex: guachi 晚餐 - 100
@@ -112,26 +130,29 @@ var (
 			commandIndex: 2,
 			argsAllowed:  3,
 			execFunc:     spendMoney,
-			helpDesc:     "<錢包名稱> <原因> - <多少錢>\nex: guachi 晚餐 - 100",
+			helpDesc:     "請輸入:\n【錢包名稱】【原因】-【多少錢】\n\nex: guachi 晚餐 - 100",
 		},
 	}
 )
 
-func getCommands() string {
-	text := "< ... > : 欄位必填\n[ ... ] : 欄位選填\n日期格式: 2019/05/20\n\n"
-	for i, command := range commandDisplayedInHelp {
-		text += strconv.FormatInt(int64(i+1), 10) + ". " + commands[command].helpDesc + "\n"
-		if i != len(commandDisplayedInHelp)-1 {
-			text += "\n"
-		}
-	}
-	return text
-}
-
 func getWalletNotFoundResponse() *response {
 	return &response{
-		text: linebot.NewTextMessage("錢包不存在，請先建立錢包"),
+		messages: []linebot.SendingMessage{
+			linebot.NewTextMessage("錢包不存在，請先建立錢包"),
+		},
 	}
+}
+
+func getHelpReplyText(commandName string) string {
+	if len(commandName) == 0 {
+		return helpReplyTexts
+	}
+
+	command, ok := commands[commandName]
+	if !ok {
+		return helpReplyTexts
+	}
+	return command.helpDesc
 }
 
 func (im *impl) procCommand(text string) (*response, error) {
@@ -146,7 +167,7 @@ func (im *impl) procCommand(text string) (*response, error) {
 	for i, text := range texts {
 		// check that if text fits the command name
 		// also, the command name should be in the right place
-		if command, ok := commands[commandName(text)]; ok && i == command.commandIndex {
+		if command, ok := commands[text]; ok && i == command.commandIndex {
 			found = true
 			targetCommand = command
 			continue
@@ -170,12 +191,32 @@ func createWallet(im *impl, args ...string) (*response, error) {
 		return nil, err
 	} else if err == wallet.ErrWalletExist {
 		return &response{
-			text: linebot.NewTextMessage("錢包已經存在囉"),
+			messages: []linebot.SendingMessage{
+				linebot.NewTextMessage("錢包已經存在囉"),
+			},
 		}, nil
 	}
 
 	return &response{
-		text: linebot.NewTextMessage("創建 " + userID + " 的錢包成功"),
+		messages: []linebot.SendingMessage{
+			linebot.NewTextMessage("建立 " + userID + " 的錢包成功"),
+		},
+	}, nil
+}
+
+func deleteWallet(im *impl, args ...string) (*response, error) {
+	userID := args[0]
+	if err := im.wallet.Delete(userID); err == wallet.ErrWalletNotFound {
+		return getWalletNotFoundResponse(), nil
+	} else if err != nil {
+		logrus.WithField("err", err).Error("wallet.Delete failed in deleteWallet")
+		return nil, err
+	}
+
+	return &response{
+		messages: []linebot.SendingMessage{
+			linebot.NewTextMessage("刪除 " + userID + " 的錢包成功"),
+		},
 	}, nil
 }
 
@@ -189,7 +230,9 @@ func emptyBalance(im *impl, args ...string) (*response, error) {
 	}
 
 	return &response{
-		text: linebot.NewTextMessage("已清空 " + userID + " 的錢包"),
+		messages: []linebot.SendingMessage{
+			linebot.NewTextMessage("已清空 " + userID + " 的錢包"),
+		},
 	}, nil
 }
 
@@ -204,43 +247,64 @@ func getBalance(im *impl, args ...string) (*response, error) {
 	}
 
 	return &response{
-		text: linebot.NewTextMessage("目前餘額 " + strconv.FormatInt(balance, 10) + "元"),
+		messages: []linebot.SendingMessage{
+			linebot.NewTextMessage("目前餘額 " + strconv.FormatInt(balance, 10) + "元"),
+		},
 	}, nil
 }
 
-// format: 2019/05/20 12:00
-func parseToTimestamp(timestampStr string) (int64, error) {
-	const shortForm = "2006/01/02"
-	result, err := time.Parse(shortForm, timestampStr)
-	if err != nil {
-		logrus.WithField("err", err).Error("time.Parse failed in parseToTimestamp")
-		return int64(0), err
+func getBalancePrepare(im *impl, args ...string) (*response, error) {
+	userID := args[0]
+
+	if !im.wallet.IsWalletExist(userID) {
+		return getWalletNotFoundResponse(), nil
 	}
 
 	location, _ := time.LoadLocation("Asia/Taipei")
-	return result.In(location).Unix(), nil
+	now := time.Now()
+	now = now.In(location)
+	todayStartTime := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, location).Unix()
+	todayEndTime := todayStartTime + int64(86400)
+
+	postbackReceiver := getPostbackReceiver(commandGetBalanceLogs, userID)
+	bytesToday := postbackReceiver.withTimeRange(todayStartTime, todayEndTime).toJSONBytes()
+	bytesLast3Days := postbackReceiver.withTimeRange(todayStartTime-int64(2*86400), todayEndTime).toJSONBytes()
+	bytesLast7Days := postbackReceiver.withTimeRange(todayStartTime-int64(6*86400), todayEndTime).toJSONBytes()
+
+	return &response{
+		messages: []linebot.SendingMessage{
+			linebot.NewTemplateMessage("欲知詳情", linebot.NewButtonsTemplate(
+				"https://upload.cc/i1/2019/06/30/msrwg8.jpg", "歷史紀錄", "請選擇你想要查詢的日期",
+				linebot.NewPostbackAction("今天", string(bytesToday), "", ""),
+				linebot.NewPostbackAction("近3天", string(bytesLast3Days), "", ""),
+				linebot.NewPostbackAction("近7天", string(bytesLast7Days), "", ""),
+				linebot.NewMessageAction("自訂", "help 歷史紀錄"),
+			)),
+		},
+	}, nil
 }
 
 func getBalanceLogs(im *impl, args ...string) (*response, error) {
 	userID := args[0]
 
-	startTime, err := parseToTimestamp(args[1])
+	if len(args) == 1 {
+		return getBalancePrepare(im, args...)
+	}
+
+	startTime, err := base.ParseToTimestamp(args[1])
+	if err != nil {
+		logrus.WithField("err", err).Error("parseToTimestamp failed in getBalanceLogs")
+		return nil, ErrInvalidArgument
+	}
+	endTime, err := base.ParseToTimestamp(args[2])
 	if err != nil {
 		logrus.WithField("err", err).Error("parseToTimestamp failed in getBalanceLogs")
 		return nil, ErrInvalidArgument
 	}
 
-	options := []wallet.GetLogsOption{wallet.WithStartTime(startTime)}
-	if len(args) == 2 {
-		// startTime + int64(86400) is the endTime of this date
-		options = append(options, wallet.WithEndTime(startTime+int64(86400)))
-	} else if len(args) == 3 {
-		endTime, err := parseToTimestamp(args[2])
-		if err != nil {
-			logrus.WithField("err", err).Error("parseToTimestamp failed in getBalanceLogs")
-			return nil, ErrInvalidArgument
-		}
-		options = append(options, wallet.WithEndTime(endTime))
+	options := []wallet.GetLogsOption{
+		wallet.WithStartTime(startTime),
+		wallet.WithEndTime(endTime),
 	}
 
 	balanceLogs, err := im.wallet.GetBalanceLogs(userID, options...)
@@ -250,12 +314,17 @@ func getBalanceLogs(im *impl, args ...string) (*response, error) {
 	}
 
 	texts := ""
-	for _, balanceLog := range balanceLogs {
-		texts += balanceLog.Timestamp + " " + balanceLog.Reason + " " + strconv.FormatInt(balanceLog.Amount, 10) + "元\n"
+	for i, balanceLog := range balanceLogs {
+		texts += balanceLog.Timestamp + " " + balanceLog.Reason + " " + strconv.FormatInt(balanceLog.Amount, 10) + "元"
+		if i != len(balanceLogs)-1 {
+			texts += "\n"
+		}
 	}
 
 	return &response{
-		text: linebot.NewTextMessage("歷史紀錄 :\n" + texts),
+		messages: []linebot.SendingMessage{
+			linebot.NewTextMessage("歷史紀錄 :\n" + texts),
+		},
 	}, nil
 }
 
@@ -296,7 +365,9 @@ func depositMoney(im *impl, args ...string) (*response, error) {
 	line2 := reason + " +" + args[2] + "元"
 	line3 := "目前餘額 " + strconv.FormatInt(resultedBalance, 10) + "元"
 	return &response{
-		text: linebot.NewTextMessage(line1 + "\n" + line2 + "\n---\n" + line3),
+		messages: []linebot.SendingMessage{
+			linebot.NewTextMessage(line1 + "\n" + line2 + "\n---\n" + line3),
+		},
 	}, nil
 }
 
@@ -337,6 +408,8 @@ func spendMoney(im *impl, args ...string) (*response, error) {
 	line2 := reason + " -" + args[2] + "元"
 	line3 := "目前餘額 " + strconv.FormatInt(resultedBalance, 10) + "元"
 	return &response{
-		text: linebot.NewTextMessage(line1 + "\n" + line2 + "\n---\n" + line3),
+		messages: []linebot.SendingMessage{
+			linebot.NewTextMessage(line1 + "\n" + line2 + "\n---\n" + line3),
+		},
 	}, nil
 }

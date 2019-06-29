@@ -23,6 +23,8 @@ type BalanceLog struct {
 type Wallet interface {
 	// Create creates a new wallet for user
 	Create(userID string) error
+	// Delete deletes user's wallet
+	Delete(userID string) error
 	// Empty will empty user's balance to zero
 	EmptyBalance(userID string) error
 	// GetBalance will get balance of a user
@@ -33,6 +35,8 @@ type Wallet interface {
 	Deposit(userID string, amount int64, reason string) error
 	// Spend will spend `amount` NTD from user's wallet
 	Spend(userID string, amount int64, reason string) error
+	// IsWalletExist will check if user's wallet does exist
+	IsWalletExist(userID string) bool
 }
 
 type getLogsOption struct {
