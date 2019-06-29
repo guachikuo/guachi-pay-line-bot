@@ -3,6 +3,7 @@ package wallet
 import (
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -10,6 +11,7 @@ import (
 )
 
 const (
+	// UsersWallet related statements
 	checkIfWalletExists = `SELECT 1 FROM "UsersWallet" WHERE "userID" = $1`
 	createWallet        = `
 		INSERT INTO "UsersWallet" ("userID", "balance")
@@ -18,6 +20,15 @@ const (
 	patchWallet       = `UPDATE "UsersWallet" SET balance = $1 WHERE "userID" = $2;`
 	atomicPatchWallet = `UPDATE "UsersWallet" SET balance = balance + $1 WHERE "userID" = $2;`
 	getBalance        = `SELECT balance FROM "UsersWallet" WHERE "userID" = $1`
+
+	// UsersWalletLog related statements
+	insertWalletLog = `
+		INSERT INTO "UsersWalletLog" ("userID", reason, amount, timestamp)
+			VALUES ($1, $2, $3, $4);
+	`
+	deleteAllWalletLogs = `DELETE FROM "UsersWalletLog" WHERE "userID" = $1`
+	getWalletAllLogs    = `SELECT * FROM "UsersWalletLog WHERE "userID" = $1`
+	getWalletLogs       = `SELECT * FROM "UsersWalletLog WHERE "userID" = $1 AND timestamp >= $2 AND timestamp <= $3`
 )
 
 var (
@@ -57,6 +68,13 @@ func NewWallet() (Wallet, error) {
 	}, nil
 }
 
+func execRollBack(tx *sql.Tx) {
+	if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+		logrus.WithField("err", err).Error("tx.Rollback() failed in Deposit")
+	}
+	return
+}
+
 func (im *impl) Create(userID string) error {
 	result, err := im.db.Exec(checkIfWalletExists, userID)
 	if err != nil {
@@ -88,9 +106,16 @@ func (im *impl) Create(userID string) error {
 }
 
 func (im *impl) EmptyBalance(userID string) error {
-	result, err := im.db.Exec(patchWallet, int64(0), userID)
+	tx, err := im.db.Begin()
 	if err != nil {
-		logrus.WithField("err", err).Error("im.db.Exec(patchWallet) failed in EmptyBalance")
+		logrus.WithField("err", err).Error("im.db.Begin failed in EmptyBalance")
+		return err
+	}
+	defer execRollBack(tx)
+
+	result, err := tx.Exec(patchWallet, int64(0), userID)
+	if err != nil {
+		logrus.WithField("err", err).Error("tx.Exec(patchWallet) failed in EmptyBalance")
 		return err
 	}
 
@@ -99,6 +124,16 @@ func (im *impl) EmptyBalance(userID string) error {
 		return err
 	} else if rowsAffected == int64(0) {
 		return ErrWalletNotFound
+	}
+
+	if _, err := tx.Exec(deleteAllWalletLogs, userID); err != nil {
+		logrus.WithField("err", err).Error("tx.Exec(patchWallet) failed in EmptyBalance")
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		logrus.WithField("err", err).Error("tx.Commit() failed in EmptyBalance")
+		return err
 	}
 	return nil
 }
@@ -117,33 +152,83 @@ func (im *impl) GetBalance(userID string) (int64, error) {
 }
 
 func (im *impl) Deposit(userID string, amount int64, reason string) error {
-	result, err := im.db.Exec(atomicPatchWallet, amount, userID)
+	tx, err := im.db.Begin()
 	if err != nil {
-		logrus.WithField("err", err).Error("im.db.Exec upsert wallet failed in AtomicPatchWallet")
+		logrus.WithField("err", err).Error("im.db.Begin failed in Deposit")
+		return err
+	}
+	defer execRollBack(tx)
+
+	result, err := tx.Exec(atomicPatchWallet, amount, userID)
+	if err != nil {
+		logrus.WithField("err", err).Error("tx.Exec(atomicPatchWallet) failed in Deposit")
 		return err
 	}
 
 	if rowsAffected, err := result.RowsAffected(); err != nil {
-		logrus.WithField("err", err).Error("result.RowsAffected failed in AtomicPatchWallet")
+		logrus.WithField("err", err).Error("result.RowsAffected failed in Deposit")
 		return err
 	} else if err == nil && rowsAffected == int64(0) {
 		return ErrWalletNotFound
+	}
+
+	result, err = tx.Exec(insertWalletLog, userID, reason, amount, time.Now().Unix())
+	if err != nil {
+		logrus.WithField("err", err).Error("tx.Exec(insertWalletLog) failed in Deposit")
+		return err
+	}
+
+	if rowsAffected, err := result.RowsAffected(); err != nil {
+		logrus.WithField("err", err).Error("result.RowsAffected failed in Deposit")
+		return err
+	} else if err == nil && rowsAffected == int64(0) {
+		return ErrWalletNotFound
+	}
+
+	if err := tx.Commit(); err != nil {
+		logrus.WithField("err", err).Error("tx.Commit() failed in EmptyBalance")
+		return err
 	}
 	return nil
 }
 
 func (im *impl) Spend(userID string, amount int64, reason string) error {
+	tx, err := im.db.Begin()
+	if err != nil {
+		logrus.WithField("err", err).Error("im.db.Begin failed in Spend")
+		return err
+	}
+	defer execRollBack(tx)
+
 	result, err := im.db.Exec(atomicPatchWallet, -1*amount, userID)
 	if err != nil {
-		logrus.WithField("err", err).Error("im.db.Exec upsert wallet failed in AtomicPatchWallet")
+		logrus.WithField("err", err).Error("im.db.Exec(atomicPatchWallet) failed in Spend")
 		return err
 	}
 
 	if rowsAffected, err := result.RowsAffected(); err != nil {
-		logrus.WithField("err", err).Error("result.RowsAffected failed in AtomicPatchWallet")
+		logrus.WithField("err", err).Error("result.RowsAffected failed in Spend")
 		return err
 	} else if err == nil && rowsAffected == int64(0) {
 		return ErrWalletNotFound
+	}
+
+	result, err = tx.Exec(insertWalletLog, userID, reason, -1*amount, time.Now().Unix())
+	if err != nil {
+		logrus.WithField("err", err).Error("tx.Exec(insertWalletLog) failed in Spend")
+		return err
+	}
+
+	if rowsAffected, err := result.RowsAffected(); err != nil {
+		logrus.WithField("err", err).Error("result.RowsAffected failed in Spend")
+		return err
+	} else if err == nil && rowsAffected == int64(0) {
+		return ErrWalletNotFound
+	}
+
+	if err := tx.Commit(); err != nil {
+		logrus.WithField("err", err).Error("tx.Commit() failed in Spend")
+		return err
 	}
 	return nil
 }

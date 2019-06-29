@@ -51,7 +51,6 @@ var (
 	// commandDisplayedInHelp defines what commands could be displayed in `!help` and their orders
 	commandDisplayedInHelp = []commandName{
 		commandCreateWallet,
-		commandCreateWallet,
 		commandEmptyWallet,
 		commandGetBalance,
 		commandDepositMoney,
@@ -105,9 +104,12 @@ var (
 func getCommands() string {
 	text := ""
 	for i, command := range commandDisplayedInHelp {
-		text += strconv.FormatInt(int64(i+1), 10) + ". " + commands[command].helpDesc + "\n\n"
+		text += strconv.FormatInt(int64(i+1), 10) + ". " + commands[command].helpDesc + "\n"
+		if i != len(commandDisplayedInHelp)-1 {
+			text += "\n"
+		}
 	}
-	return "```" + text + "```"
+	return text
 }
 
 func getWalletNotFoundResponse() *response {
