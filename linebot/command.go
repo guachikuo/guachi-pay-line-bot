@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/line/line-bot-sdk-go/linebot"
 	"github.com/sirupsen/logrus"
@@ -13,6 +14,7 @@ import (
 
 const (
 	helpCommandName = "!help"
+	timeTemplate    = "2016/01/01"
 )
 
 type response struct {
@@ -35,11 +37,12 @@ type command struct {
 type commandName string
 
 const (
-	commandCreateWallet commandName = "創建錢包"
-	commandEmptyWallet  commandName = "清空錢包"
-	commandGetBalance   commandName = "查詢餘額"
-	commandDepositMoney commandName = "+"
-	commandSpendMoney   commandName = "-"
+	commandCreateWallet   commandName = "創建錢包"
+	commandEmptyWallet    commandName = "清空錢包"
+	commandGetBalance     commandName = "查詢餘額"
+	commandGetBalanceLogs commandName = "歷史紀錄"
+	commandDepositMoney   commandName = "+"
+	commandSpendMoney     commandName = "-"
 )
 
 var (
@@ -53,6 +56,7 @@ var (
 		commandCreateWallet,
 		commandEmptyWallet,
 		commandGetBalance,
+		commandGetBalanceLogs,
 		commandDepositMoney,
 		commandSpendMoney,
 	}
@@ -83,6 +87,14 @@ var (
 			helpDesc:     "查詢餘額 <錢包名稱>\nex: 查詢餘額 guachi",
 		},
 
+		// ex: 歷史紀錄 <錢包名稱> <開始時間> [結束時間]
+		commandGetBalanceLogs: command{
+			commandIndex: 0,
+			argsAllowed:  2,
+			execFunc:     getBalanceLogs,
+			helpDesc:     "歷史紀錄 <錢包名稱> <開始時間> [結束時間] \n時間格式: 2019/05/20\nex: 歷史紀錄 guachi 2019/05/20 2019/05/21",
+		},
+
 		// ex: guachi 中樂透 + 100
 		commandDepositMoney: command{
 			commandIndex: 2,
@@ -102,7 +114,7 @@ var (
 )
 
 func getCommands() string {
-	text := ""
+	text := "<欄位1> : 欄位必填\n[欄位2] : 欄位選填\n"
 	for i, command := range commandDisplayedInHelp {
 		text += strconv.FormatInt(int64(i+1), 10) + ". " + commands[command].helpDesc + "\n"
 		if i != len(commandDisplayedInHelp)-1 {
@@ -188,6 +200,52 @@ func getBalance(im *impl, args ...string) (*response, error) {
 
 	return &response{
 		text: linebot.NewTextMessage("目前餘額 " + strconv.FormatInt(balance, 10) + "元"),
+	}, nil
+}
+
+// format: 2019/05/20 12:00
+func parseToTimestamp(timestampStr string) (int64, error) {
+	location, _ := time.LoadLocation("Asia/Taipei")
+	time, err := time.Parse(timeTemplate, timestampStr)
+	if err != nil {
+		logrus.WithField("err", err).Error("time.Parse failed in parseToTimestamp")
+		return int64(0), err
+	}
+	return time.In(location).Unix(), nil
+}
+
+func getBalanceLogs(im *impl, args ...string) (*response, error) {
+	userID := args[0]
+
+	startTime, err := parseToTimestamp(args[1])
+	if err != nil {
+		logrus.WithField("err", err).Error("parseToTimestamp failed in getBalanceLogs")
+		return nil, ErrInvalidArgument
+	}
+
+	options := []wallet.GetLogsOption{wallet.WithStartTime(startTime)}
+	if len(args) > 2 {
+		endTime, err := parseToTimestamp(args[2])
+		if err != nil {
+			logrus.WithField("err", err).Error("parseToTimestamp failed in getBalanceLogs")
+			return nil, ErrInvalidArgument
+		}
+		options = append(options, wallet.WithEndTime(endTime))
+	}
+
+	balanceLogs, err := im.wallet.GetBalanceLogs(userID, options...)
+	if err != nil {
+		logrus.WithField("err", err).Error("wallet.GetBalanceLogs failed in getBalanceLogs")
+		return nil, err
+	}
+
+	texts := ""
+	for _, balanceLog := range balanceLogs {
+		texts += balanceLog.Timestamp + " " + balanceLog.Reason + " " + strconv.FormatInt(balanceLog.Amount, 10) + "元\n"
+	}
+
+	return &response{
+		text: linebot.NewTextMessage("歷史紀錄:\n" + texts),
 	}, nil
 }
 
