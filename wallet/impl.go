@@ -3,6 +3,7 @@ package wallet
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -143,7 +144,27 @@ func convertToTimestampStr(timestamp int64) string {
 	// change to Asia/Taipei zone
 	location, _ := time.LoadLocation("Asia/Taipei")
 	temp = temp.In(location)
-	return fmt.Sprintf("%d/%d/%d %d:%d", temp.Year(), temp.Month(), temp.Day(), temp.Hour(), temp.Minute())
+
+	monthStr := strconv.FormatInt(int64(temp.Month()), 10)
+	if temp.Month() < time.October {
+		monthStr = "0" + monthStr
+	}
+
+	dayStr := strconv.FormatInt(int64(temp.Day()), 10)
+	if temp.Day() < 10 {
+		dayStr = "0" + dayStr
+	}
+
+	hourStr := strconv.FormatInt(int64(temp.Hour()), 10)
+	if temp.Hour() < 10 {
+		hourStr = "0" + hourStr
+	}
+
+	minuteStr := strconv.FormatInt(int64(temp.Minute()), 10)
+	if temp.Minute() < 10 {
+		minuteStr = "0" + minuteStr
+	}
+	return fmt.Sprintf("%d/%s/%s %s:%s", temp.Year(), monthStr, dayStr, hourStr, minuteStr)
 }
 
 func (im *impl) GetBalanceLogs(userID string, options ...GetLogsOption) ([]*BalanceLog, error) {

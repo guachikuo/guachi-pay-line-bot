@@ -27,6 +27,10 @@ type command struct {
 	// ex: guachi 儲值
 	// then the value is 1
 	argsAllowed int
+	// optionalArgsAllowed defines the number of optional args that this command is allowed
+	// ex: 歷史紀錄 guachi 2019/05/20 2019/06/20
+	// because the second date is optional, so the value of `optionalArgsAllowed` should be 1
+	optionalArgsAllowed int
 	// execFunc is the execution function
 	execFunc func(im *impl, args ...string) (*response, error)
 	// helpDesc describe how this command works, and it will display when the user calls `!help`
@@ -86,12 +90,13 @@ var (
 			helpDesc:     "查詢餘額 <錢包名稱>\nex: 查詢餘額 guachi",
 		},
 
-		// ex: 歷史紀錄 guachi 2019/05/20 2019/05/21
+		// ex: 歷史紀錄 guachi 2019/05/20 2019/06/20
 		commandGetBalanceLogs: command{
-			commandIndex: 0,
-			argsAllowed:  2,
-			execFunc:     getBalanceLogs,
-			helpDesc:     "歷史紀錄 <錢包名稱> <開始時間> [結束時間] \n時間格式: 2019/05/20\nex: 歷史紀錄 guachi 2019/05/20 2019/05/21",
+			commandIndex:        0,
+			argsAllowed:         2,
+			optionalArgsAllowed: 1,
+			execFunc:            getBalanceLogs,
+			helpDesc:            "歷史紀錄 <錢包名稱> <日期> [日期]\nex: 歷史紀錄 guachi 2019/05/20 2019/06/20",
 		},
 
 		// ex: guachi 中樂透 + 100
@@ -113,7 +118,7 @@ var (
 )
 
 func getCommands() string {
-	text := "< ... > : 欄位必填\n[ ... ] : 欄位選填\n\n"
+	text := "< ... > : 欄位必填\n[ ... ] : 欄位選填\n日期格式: 2019/05/20\n\n"
 	for i, command := range commandDisplayedInHelp {
 		text += strconv.FormatInt(int64(i+1), 10) + ". " + commands[command].helpDesc + "\n"
 		if i != len(commandDisplayedInHelp)-1 {
@@ -151,7 +156,8 @@ func (im *impl) procCommand(text string) (*response, error) {
 
 	// (1) valid command name is not found
 	// (2) lack of arguments
-	if !found || (found && len(args) != targetCommand.argsAllowed) {
+	validArgs := len(args) == targetCommand.argsAllowed || len(args) == targetCommand.argsAllowed+targetCommand.optionalArgsAllowed
+	if !found || (found && !validArgs) {
 		return nil, ErrCommandNotExist
 	}
 	return targetCommand.execFunc(im, args...)
@@ -225,7 +231,10 @@ func getBalanceLogs(im *impl, args ...string) (*response, error) {
 	}
 
 	options := []wallet.GetLogsOption{wallet.WithStartTime(startTime)}
-	if len(args) > 2 {
+	if len(args) == 2 {
+		// startTime + int64(86400) is the endTime of this date
+		options = append(options, wallet.WithEndTime(startTime+int64(86400)))
+	} else if len(args) == 3 {
 		endTime, err := parseToTimestamp(args[2])
 		if err != nil {
 			logrus.WithField("err", err).Error("parseToTimestamp failed in getBalanceLogs")
@@ -246,7 +255,7 @@ func getBalanceLogs(im *impl, args ...string) (*response, error) {
 	}
 
 	return &response{
-		text: linebot.NewTextMessage("歷史紀錄:\n" + texts),
+		text: linebot.NewTextMessage("歷史紀錄 :\n" + texts),
 	}, nil
 }
 
