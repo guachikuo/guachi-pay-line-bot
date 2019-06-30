@@ -14,8 +14,7 @@ import (
 )
 
 const (
-	helpCommandName = "help"
-	helpReplyTexts  = `感謝您傳送訊息給 guachi pay 😀
+	helpDescGeneral = `感謝您傳送訊息給 guachi pay 😀
 	
 您還沒有錢包嗎? 可以參考這個指令唷 ~
 💰 新增錢包【錢包名稱】
@@ -58,13 +57,16 @@ type command struct {
 }
 
 const (
+	commandHelp           = "help"
 	commandCreateWallet   = "新增錢包"
 	commandDeleteWallet   = "刪除錢包"
 	commandEmptyWallet    = "清空錢包"
 	commandGetBalance     = "查詢餘額"
 	commandGetBalanceLogs = "歷史紀錄"
-	commandDepositMoney   = "+"
-	commandSpendMoney     = "-"
+	commandDepositMoney1  = "儲值"
+	commandDepositMoney2  = "+"
+	commandSpendMoney1    = "花費"
+	commandSpendMoney2    = "-"
 )
 
 var (
@@ -79,7 +81,7 @@ var (
 		commandCreateWallet: command{
 			commandIndex: 0,
 			argsAllowed:  1,
-			execFunc:     createWallet,
+			execFunc:     (*impl).createWallet,
 			helpDesc:     "新增錢包【錢包名稱】\nex: 新增錢包 guachi",
 		},
 
@@ -87,7 +89,7 @@ var (
 		commandDeleteWallet: command{
 			commandIndex: 0,
 			argsAllowed:  1,
-			execFunc:     deleteWallet,
+			execFunc:     (*impl).deleteWallet,
 			helpDesc:     "刪除錢包【錢包名稱】\nex: 刪除錢包 guachi",
 		},
 
@@ -95,7 +97,7 @@ var (
 		commandEmptyWallet: command{
 			commandIndex: 0,
 			argsAllowed:  1,
-			execFunc:     emptyBalance,
+			execFunc:     (*impl).emptyBalance,
 			helpDesc:     "請輸入:\n清空錢包【錢包名稱】\n\nex: 清空錢包 guachi",
 		},
 
@@ -103,7 +105,7 @@ var (
 		commandGetBalance: command{
 			commandIndex: 0,
 			argsAllowed:  1,
-			execFunc:     getBalance,
+			execFunc:     (*impl).getBalance,
 			helpDesc:     "請輸入:\n查詢餘額【錢包名稱】\n\nex: 查詢餘額 guachi",
 		},
 
@@ -113,23 +115,39 @@ var (
 			commandIndex:        0,
 			argsAllowed:         1,
 			optionalArgsAllowed: 2,
-			execFunc:            getBalanceLogs,
+			execFunc:            (*impl).getBalanceLogs,
 			helpDesc:            "請輸入:\n歷史紀錄【錢包名稱】【起日】【迄日】\n\nex: 歷史紀錄 guachi 2019/05/20 2019/06/20",
 		},
 
-		// ex: guachi 中樂透 + 100
-		commandDepositMoney: command{
+		// ex: guachi 中樂透 (儲值 or +) 100
+		commandDepositMoney1: command{
 			commandIndex: 2,
 			argsAllowed:  3,
-			execFunc:     depositMoney,
+			execFunc:     (*impl).depositMoney,
 			helpDesc:     "請輸入:\n【錢包名稱】【原因】+【多少錢】\n\nex: guachi 中樂透 + 100",
 		},
 
-		// ex: guachi 晚餐 - 100
-		commandSpendMoney: command{
+		// ex: guachi 中樂透 (儲值 or +) 100
+		commandDepositMoney2: command{
 			commandIndex: 2,
 			argsAllowed:  3,
-			execFunc:     spendMoney,
+			execFunc:     (*impl).depositMoney,
+			helpDesc:     "請輸入:\n【錢包名稱】【原因】+【多少錢】\n\nex: guachi 中樂透 + 100",
+		},
+
+		// ex: guachi 晚餐 (花費 or -) 100
+		commandSpendMoney1: command{
+			commandIndex: 2,
+			argsAllowed:  3,
+			execFunc:     (*impl).spendMoney,
+			helpDesc:     "請輸入:\n【錢包名稱】【原因】-【多少錢】\n\nex: guachi 晚餐 - 100",
+		},
+
+		// ex: guachi 晚餐 (花費 or -) 100
+		commandSpendMoney2: command{
+			commandIndex: 2,
+			argsAllowed:  3,
+			execFunc:     (*impl).spendMoney,
 			helpDesc:     "請輸入:\n【錢包名稱】【原因】-【多少錢】\n\nex: guachi 晚餐 - 100",
 		},
 	}
@@ -141,18 +159,6 @@ func getWalletNotFoundResponse() *response {
 			linebot.NewTextMessage("錢包不存在，請先建立錢包"),
 		},
 	}
-}
-
-func getHelpReplyText(commandName string) string {
-	if len(commandName) == 0 {
-		return helpReplyTexts
-	}
-
-	command, ok := commands[commandName]
-	if !ok {
-		return helpReplyTexts
-	}
-	return command.helpDesc
 }
 
 func (im *impl) procCommand(text string) (*response, error) {
@@ -184,7 +190,7 @@ func (im *impl) procCommand(text string) (*response, error) {
 	return targetCommand.execFunc(im, args...)
 }
 
-func createWallet(im *impl, args ...string) (*response, error) {
+func (im *impl) createWallet(args ...string) (*response, error) {
 	userID := args[0]
 	if err := im.wallet.Create(userID); err != nil && err != wallet.ErrWalletExist {
 		logrus.WithField("err", err).Error("wallet.Create failed in createWallet")
@@ -204,7 +210,7 @@ func createWallet(im *impl, args ...string) (*response, error) {
 	}, nil
 }
 
-func deleteWallet(im *impl, args ...string) (*response, error) {
+func (im *impl) deleteWallet(args ...string) (*response, error) {
 	userID := args[0]
 	if err := im.wallet.Delete(userID); err == wallet.ErrWalletNotFound {
 		return getWalletNotFoundResponse(), nil
@@ -220,7 +226,7 @@ func deleteWallet(im *impl, args ...string) (*response, error) {
 	}, nil
 }
 
-func emptyBalance(im *impl, args ...string) (*response, error) {
+func (im *impl) emptyBalance(args ...string) (*response, error) {
 	userID := args[0]
 	if err := im.wallet.EmptyBalance(userID); err == wallet.ErrWalletNotFound {
 		return getWalletNotFoundResponse(), nil
@@ -236,7 +242,7 @@ func emptyBalance(im *impl, args ...string) (*response, error) {
 	}, nil
 }
 
-func getBalance(im *impl, args ...string) (*response, error) {
+func (im *impl) getBalance(args ...string) (*response, error) {
 	userID := args[0]
 	balance, err := im.wallet.GetBalance(userID)
 	if err == wallet.ErrWalletNotFound {
@@ -253,9 +259,7 @@ func getBalance(im *impl, args ...string) (*response, error) {
 	}, nil
 }
 
-func getBalancePrepare(im *impl, args ...string) (*response, error) {
-	userID := args[0]
-
+func (im *impl) getBalanceLogsTemplateMessage(userID string) (*response, error) {
 	if !im.wallet.IsWalletExist(userID) {
 		return getWalletNotFoundResponse(), nil
 	}
@@ -284,11 +288,13 @@ func getBalancePrepare(im *impl, args ...string) (*response, error) {
 	}, nil
 }
 
-func getBalanceLogs(im *impl, args ...string) (*response, error) {
+func (im *impl) getBalanceLogs(args ...string) (*response, error) {
 	userID := args[0]
 
+	// if the command looks like `歷史紀錄 guachi`
+	// we will display `TemplateMessage` for users, and let them choose what to do next
 	if len(args) == 1 {
-		return getBalancePrepare(im, args...)
+		return im.getBalanceLogsTemplateMessage(userID)
 	}
 
 	startTime, err := base.ParseToTimestamp(args[1])
@@ -328,7 +334,7 @@ func getBalanceLogs(im *impl, args ...string) (*response, error) {
 	}, nil
 }
 
-func depositMoney(im *impl, args ...string) (*response, error) {
+func (im *impl) depositMoney(args ...string) (*response, error) {
 	userID := args[0]
 
 	// get original balance first
@@ -371,7 +377,7 @@ func depositMoney(im *impl, args ...string) (*response, error) {
 	}, nil
 }
 
-func spendMoney(im *impl, args ...string) (*response, error) {
+func (im *impl) spendMoney(args ...string) (*response, error) {
 	userID := args[0]
 
 	// get original balance first

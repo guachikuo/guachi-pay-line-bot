@@ -48,22 +48,15 @@ func NewLinebot(
 	}, nil
 }
 
-func (im *impl) helpReply(replyToken, commandName string) error {
-	_, err := im.linebot.ReplyMessage(replyToken, linebot.NewTextMessage(getHelpReplyText(commandName))).Do()
-	return err
-}
-
-func (im *impl) errorReply(replyToken string) error {
-	text := "系統錯誤，請重新試試 (moon apology)"
-	_, err := im.linebot.ReplyMessage(replyToken, linebot.NewTextMessage(text)).Do()
-	return err
-}
-
 func (im *impl) handleEventTypePostback(replyToken string, postback *linebot.Postback) error {
 	postbackReceiver := postbackReceiver{}
 	if err := json.Unmarshal([]byte(postback.Data), &postbackReceiver); err != nil {
 		logrus.WithField("err", err).Error("json.Unmarshal failed in handleEventTypePostback")
-		im.errorReply(replyToken)
+
+		text := "系統錯誤，請重新試試"
+		if _, err := im.linebot.ReplyMessage(replyToken, linebot.NewTextMessage(text)).Do(); err != nil {
+			logrus.WithField("err", err).Warn("im.linebot.ReplyMessage failed in handleEventTypePostback")
+		}
 		return err
 	}
 
@@ -80,7 +73,10 @@ func (im *impl) handleEventTypePostback(replyToken string, postback *linebot.Pos
 	// modify to the valid message, and handle it
 	response, err := im.procCommand(text)
 	if err != nil {
-		im.errorReply(replyToken)
+		text := "系統錯誤，請重新試試"
+		if _, err := im.linebot.ReplyMessage(replyToken, linebot.NewTextMessage(text)).Do(); err != nil {
+			logrus.WithField("err", err).Warn("im.linebot.ReplyMessage failed in handleEventTypePostback")
+		}
 		return err
 	}
 
@@ -92,27 +88,39 @@ func (im *impl) handleEventTypePostback(replyToken string, postback *linebot.Pos
 	return nil
 }
 
+func getHelpDesc(commandName string) string {
+	if len(commandName) == 0 {
+		return helpDescGeneral
+	}
+
+	command, ok := commands[commandName]
+	if !ok {
+		return helpDescGeneral
+	}
+	return command.helpDesc
+}
+
 func (im *impl) handleEventTypeMessage(replyToken string, messageInterface linebot.Message) error {
 	switch message := messageInterface.(type) {
 	case *linebot.TextMessage:
 		texts := strings.Split(message.Text, " ")
-		if len(texts) > 0 && texts[0] == helpCommandName {
-			// we will reply back description of commands if user uses helpCommandName
-			commandName := ""
-			if len(texts) > 1 {
-				commandName = texts[1]
-			}
-			if err := im.helpReply(replyToken, commandName); err != nil {
-				logrus.WithField("err", err).Error("im.helpReply failed in handleEventTypeMessage")
+		// if the command looks like `help 查詢餘額`
+		if len(texts) == 2 && texts[0] == commandHelp {
+			commandName := texts[1]
+			// then, we will reply back helpDesc of this command
+			if _, err := im.linebot.ReplyMessage(replyToken, linebot.NewTextMessage(getHelpDesc(commandName))).Do(); err != nil {
+				logrus.WithField("err", err).Error("im.linebot.ReplyMessage failed in handleEventTypeMessage")
 				return err
 			}
 			return nil
 		} else if len(texts) == 1 && im.wallet.IsWalletExist(texts[0]) {
 			userID := texts[0]
-
 			message := linebot.NewTemplateMessage("欲知詳情", linebot.NewCarouselTemplate(
-				linebot.NewCarouselColumn("https://upload.cc/i1/2019/06/30/MRH0J9.jpg", "記帳/查詢", "選擇一個想做的事吧!",
-					//linebot.NewMessageAction("記帳", "help 歷史紀錄"),
+				linebot.NewCarouselColumn("https://upload.cc/i1/2019/06/30/gsQh9N.jpg", "記帳", "選擇一個想做的事吧!",
+					linebot.NewMessageAction("儲值", "help 儲值"),
+					linebot.NewMessageAction("花費", "help 花費"),
+				),
+				linebot.NewCarouselColumn("https://upload.cc/i1/2019/06/30/MRH0J9.jpg", "查詢", "選擇一個想做的事吧!",
 					linebot.NewPostbackAction("餘額查詢",
 						string(getPostbackReceiver(commandGetBalance, userID).toJSONBytes()),
 						"", "",
@@ -134,34 +142,40 @@ func (im *impl) handleEventTypeMessage(replyToken string, messageInterface lineb
 				),
 			))
 
-			// we will reply back accroding to the response after processing the command
+			// reply template message to user
 			if _, err := im.linebot.ReplyMessage(replyToken, message).Do(); err != nil {
-				logrus.WithField("err", err).Error("ReplyMessage failed in handleEventTypeMessage")
+				logrus.WithField("err", err).Error("im.linebot.ReplyMessage failed in handleEventTypeMessage")
 				return err
 			}
+			return nil
 		}
 
-		// get the message, and handle it
+		// if `texts` from `linebot.TextMessage` doesn't match the cases above,
+		// then we check if it is the allowed command, and handle it
 		response, err := im.procCommand(message.Text)
 		if err != nil {
-			im.helpReply(replyToken, "")
-			return nil
+			if _, err := im.linebot.ReplyMessage(replyToken, linebot.NewTextMessage(getHelpDesc(""))).Do(); err != nil {
+				logrus.WithField("err", err).Warn("im.linebot.ReplyMessage failed in handleEventTypeMessage")
+			}
+			return err
 		}
 
 		// we will reply back accroding to the response after processing the command
 		if _, err := im.linebot.ReplyMessage(replyToken, response.messages...).Do(); err != nil {
-			logrus.WithField("err", err).Error("ReplyMessage failed in handleEventTypeMessage")
+			logrus.WithField("err", err).Error("im.linebot.ReplyMessage failed in handleEventTypeMessage")
 			return err
 		}
 	case *linebot.StickerMessage:
 		stickerMessage := linebot.NewStickerMessage(getSticker())
 		// we will reply back a sticker randomly if we get also a sticker
 		if _, err := im.linebot.ReplyMessage(replyToken, stickerMessage).Do(); err != nil {
-			logrus.WithField("err", err).Error("ReplyMessage failed in handleEventTypeMessage")
+			logrus.WithField("err", err).Error("im.linebot.ReplyMessage failed in handleEventTypeMessage")
 			return err
 		}
 	default:
-		im.helpReply(replyToken, "")
+		if _, err := im.linebot.ReplyMessage(replyToken, linebot.NewTextMessage(getHelpDesc(""))).Do(); err != nil {
+			logrus.WithField("err", err).Warn("im.linebot.ReplyMessage failed in handleEventTypeMessage")
+		}
 	}
 	return nil
 }
@@ -185,6 +199,9 @@ func (im *impl) ParseLinebotCallback(w http.ResponseWriter, r *http.Request) err
 				logrus.WithField("err", err).Error("handleEventTypePostback failed in ParseLinebotCallback")
 			}
 		default:
+			if _, err := im.linebot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage(getHelpDesc(""))).Do(); err != nil {
+				logrus.WithField("err", err).Warn("im.linebot.ReplyMessage failed in ParseLinebotCallback")
+			}
 		}
 	}
 	return nil

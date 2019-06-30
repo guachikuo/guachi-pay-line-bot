@@ -12,8 +12,25 @@ var (
 	ErrInvalidSignature = linebot.ErrInvalidSignature
 )
 
-// postbackReceiver is a model that will be placed in data of `lintbot.Postback`
-// and we will get the corresponding data if user triggers `postback` event
+// postbackReceiver is a model that will be json.Marshal to json string
+// and be placed in `data` of `linebot.NewPostbackAction`
+// ex: linebot.NewPostbackAction(label, data, text, displayText string) *PostbackAction
+//
+// when a user triggers a corresponding eventPostback, lintbot will send the data back to the server
+// then, we cau use this data to recognize what to do next
+//
+// ex:
+// postbackReceiver {
+// 	CommandName: "歷史紀錄",
+// 	UserID: "guachi",
+// 	TimeRange: &timeRange{
+// 		StartTime: int64(12345678),
+// 		EndTime: int64(12345679),
+// 	}
+// }
+// when we get this receiver, we could know that
+// we should get histories of guachi's wallet beteween
+// timestamp(12345678) to timestamp(12345679)
 type postbackReceiver struct {
 	CommandName string     `json:"command"`
 	UserID      string     `json:"userID"`
